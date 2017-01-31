@@ -19,6 +19,7 @@ func InitUser() {
 	BaseRoutes.User.Handle("", ApiSessionRequired(getUser)).Methods("GET")
 	BaseRoutes.User.Handle("", ApiSessionRequired(updateUser)).Methods("PUT")
 	BaseRoutes.User.Handle("/roles", ApiSessionRequired(updateUserRoles)).Methods("PUT")
+	BaseRoutes.User.Handle("/password", ApiSessionRequired(updatePassword)).Methods("PUT")
 
 	BaseRoutes.Users.Handle("/login", ApiHandler(login)).Methods("POST")
 	BaseRoutes.Users.Handle("/logout", ApiHandler(logout)).Methods("POST")
@@ -137,6 +138,38 @@ func updateUserRoles(c *Context, w http.ResponseWriter, r *http.Request) {
 	}
 
 	ReturnStatusOK(w)
+}
+
+func updatePassword(c *Context, w http.ResponseWriter, r *http.Request) {
+	c.RequireUserId()
+	if c.Err != nil {
+		return
+	}
+
+	props := model.MapFromJson(r.Body)
+	currentPassword := props["current_password"]
+	if len(currentPassword) <= 0 {
+		c.SetInvalidParam("current_password")
+		return
+	}
+
+	newPassword := props["new_password"]
+
+	c.LogAudit("attempted")
+
+	if c.Params.UserId != c.Session.UserId {
+		c.Err = model.NewAppError("updatePassword", "api.user.update_password.context.app_error", nil, "", http.StatusForbidden)
+		return
+	}
+
+	if err := app.UpdatePasswordAsUser(c.Params.UserId, currentPassword, newPassword, c.GetSiteURL()); err != nil {
+		c.LogAudit("failed")
+		c.Err = err
+		return
+	} else {
+		c.LogAudit("completed")
+		ReturnStatusOK(w)
+	}
 }
 
 func login(c *Context, w http.ResponseWriter, r *http.Request) {
